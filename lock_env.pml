@@ -260,19 +260,24 @@ proctype monitor() {
 	assert(0 <= ship_pos[0] && ship_pos[0] <= N);
 
 	// (a) The lower pairs of doors and the higher pairs of doors are never simultaneously open.
-	assert(!(doors_status.lower == open && doors_status.higher == open));
+
+	assert(!(doors_status.lower == open) && (doors_status.higher == open));
 
 	// (b1) When the lower pair of doors is open, the higher slide is closed.
-	assert(doors_status.lower == open -> slide_status.higher == closed);
+	//assert((doors_status.lower == open) -> (slide_status.higher == closed));
+	assert(!(doors_status.lower == open) || (slide_status.higher == closed));
 
 	// (b2) When the higher pair of doors is open, the lower slide is closed.
-	assert(doors_status.higher == open -> slide_status.lower == closed);
+	//assert(doors_status.higher == open -> slide_status.lower == closed);
+	assert(!(doors_status.higher == open) || (slide_status.lower == closed))
 
 	// (c1) The lower pair of doors is only open when the water level in the lock is low.
-	assert(doors_status.lower == open -> lock_water_level == low_level);
+	//assert(doors_status.lower == open -> lock_water_level == low_level);
+	assert(!(doors_status.lower == open) || (lock_water_level == low_level))
 
 	// (c2) The higher pair of doors is only open when the water level in the lock is high.
-	assert(doors_status.higher == open -> lock_water_level == high_level);
+	//assert(doors_status.higher == open -> lock_water_level == high_level);
+	assert(!(doors_status.lower == open) || (lock_water_level == high_level))
 }
 
 // LTL Formulas for other requirements:
@@ -283,7 +288,8 @@ proctype monitor() {
 
 	// (d2) Always if a ship requests the higher pair of doors to open and its status is go_down, 
 	// the ship will eventually be inside the lock.
-	ltl d2 {[]((len(request_high) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) 
+	ltl d2 {[]((len(request_high) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) }
+
 
 
 // Initial process that instantiates all other processes and creates
