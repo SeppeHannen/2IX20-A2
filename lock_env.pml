@@ -26,10 +26,6 @@
 // The maximum number of ships immediately at either side of a lock.
 #define MAX 2
 
-// LTL formulas to be verified
-// Formula p1 holds if the first ship can always eventually enter the lock when going up.
-//ltl p1 { []<> (ship_status[0] == go_up_in_lock) } /*  */
-
 // Type for direction of ship.
 mtype:direction = { go_down, go_down_in_lock, go_up, go_up_in_lock, goal_reached };
 
@@ -56,14 +52,6 @@ typedef slides_t {
 	mtype:pos higher;
 }
 
-//Datatype to store request information.
-typedef request {
-	byte lock_id;			// The id of the lock the request targets.
-	mtype:side side; 		// The side of the lock the requests targets.
-	mtype:comp component;	// The component the requests targets.
-	mtype:pos status;		// The status the component is request to have.
-}
-
 // Asynchronous channels to handle ship requests.
 chan request_low = [M] of { bool };
 chan request_high = [M] of { bool };
@@ -84,9 +72,6 @@ mtype:direction ship_status[M];
 
 // Position of the ships.
 byte ship_pos[M];
-
-// Requests of the ships.
-request ship_req[M];
 
 // Number of ships per position.
 byte nr_of_ships_at_pos[N+1];
@@ -149,7 +134,6 @@ proctype ship(byte shipid) {
 		do
 		:: doors_status.higher == closed ->
 			atomic{ request_high!true; 
-			atomic { doors_status.higher == open ->
 				if
 				:: !lock_is_occupied ->
 						ship_status[shipid] = go_down_in_lock;
@@ -276,37 +260,30 @@ proctype monitor() {
 	assert(0 <= ship_pos[0] && ship_pos[0] <= N);
 
 	// (a) The lower pairs of doors and the higher pairs of doors are never simultaneously open.
-	assert(!(door_status.lower == open && door_status.higher == open));
+	assert(!(doors_status.lower == open && doors_status.higher == open));
 
 	// (b1) When the lower pair of doors is open, the higher slide is closed.
-	assert(door_status.lower == open -> slide_status.higher == closed);
+	assert(doors_status.lower == open -> slide_status.higher == closed);
 
 	// (b2) When the higher pair of doors is open, the lower slide is closed.
-	assert(door_status.higher == open -> slide_status.lower == closed);
+	assert(doors_status.higher == open -> slide_status.lower == closed);
 
 	// (c1) The lower pair of doors is only open when the water level in the lock is low.
-	assert(door_status.lower == open -> lock_water_level == low_level);
+	assert(doors_status.lower == open -> lock_water_level == low_level);
 
 	// (c2) The higher pair of doors is only open when the water level in the lock is high.
-	assert(door_status.higher == open -> lock_water_level == high_level);
+	assert(doors_status.higher == open -> lock_water_level == high_level);
 }
 
 // LTL Formulas for other requirements:
 
 	// (d1) Always if a ship requests the lower pair of doors to open and its status is go_up, 
 	// the ship will eventually be inside the lock.
-	ltl d1 { 	always( ship_req[1].side == low && ship_req[1].component == door 
-		&& ship_req[1].status == open && ship_status == go_up) ->
-		eventually(ship_status == go_up_in_lock) }
-	// note: the ship status and go_up_in_lock should be changed to contain
-	// the ship id and which lock they are going through for the second part.
+	ltl d1 {[]((len(request_low) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) }
 
 	// (d2) Always if a ship requests the higher pair of doors to open and its status is go_down, 
 	// the ship will eventually be inside the lock.
-	ltl d1 { 	always( ship_req[1].side == high && ship_req[1].component == door 
-		&& ship_req[1].status == open && ship_status == go_down) ->
-		eventually(ship_status == go_down_in_lock) }
-	// note: similar to (d1)s note.
+	ltl d2 {[]((len(request_high) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) 
 
 
 // Initial process that instantiates all other processes and creates
