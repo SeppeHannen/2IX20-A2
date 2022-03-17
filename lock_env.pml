@@ -133,8 +133,7 @@ proctype ship(byte shipid) {
 	:: ship_status[shipid] == go_down && ship_pos[shipid] != 0 ->
 		do
 		:: doors_status.higher == closed ->
-			request_high!true;
-			atomic { doors_status.higher == open ->
+			atomic{ request_high!true; 
 				if
 				:: !lock_is_occupied ->
 						ship_status[shipid] = go_down_in_lock;
@@ -261,6 +260,7 @@ proctype monitor() {
 	assert(0 <= ship_pos[0] && ship_pos[0] <= N);
 
 	// (a) The lower pairs of doors and the higher pairs of doors are never simultaneously open.
+
 	assert(!(doors_status.lower == open) && (doors_status.higher == open));
 
 	// (b1) When the lower pair of doors is open, the higher slide is closed.
@@ -289,6 +289,7 @@ proctype monitor() {
 	// (d2) Always if a ship requests the higher pair of doors to open and its status is go_down, 
 	// the ship will eventually be inside the lock.
 	ltl d2 {[]((len(request_high) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) }
+
 
 
 // Initial process that instantiates all other processes and creates
