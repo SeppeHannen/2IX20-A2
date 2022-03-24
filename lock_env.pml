@@ -9,12 +9,12 @@
 */
 
 /*
-	To use weak fairness in a model with synchronous channels add -DNOREDUCE -DNFAIR = 
+	To use weak fairness in a model with synchronous channels add -DNOREDUCE -DNFAIR =
 	<nr of processes> to the c compiler options.
 */
 
 /*
-	Syntax: 	&& (and), || (or), -> (implies), <-> (equivalent), ! (negation), 
+	Syntax: 	&& (and), || (or), -> (implies), <-> (equivalent), ! (negation),
 			[] (always), <> (eventually), U (until).
 
 */
@@ -133,7 +133,7 @@ proctype ship(byte shipid) {
 	:: ship_status[shipid] == go_down && ship_pos[shipid] != 0 ->
 		do
 		:: doors_status.higher == closed ->
-			atomic{ request_high!true; 
+			atomic{ request_high!true;
 				if
 				:: !lock_is_occupied ->
 						ship_status[shipid] = go_down_in_lock;
@@ -240,28 +240,96 @@ proctype main_control() {
 	do
 	:: request_low?true ->
 		if
-		:: doors_status.lower == closed ->
-			change_doors_pos!low; doors_pos_changed?true;
-		:: doors_status.lower == open -> skip;
+		:: lock_water_level == low_level ->
+			if
+			:: doors_status.lower == closed ->
+				if
+				:: doors_status.higher == closed ->
+					change_doors_pos!low; doors_pos_changed?true;
+				:: doors_status.higher == open ->
+					change_doors_pos!high; doors_pos_changed?true;
+					change_doors_pos!low; doors_pos_changed?true;
+				fi;
+			:: doors_status.lower == open -> skip;
+			fi;
+		:: lock_water_level == high_level ->
+			if
+			:: doors_status.lower == closed ->
+				if
+				:: doors_status.higher == open ->
+					change_doors_pos!high; doors_pos_changed?true;
+				:: doors_status.higher == closed -> skip;
+				fi;
+
+				if
+				:: slide_status.higher == open ->
+					change_slide_pos!high; slide_pos_changed?true;
+				:: slide_status.higher == closed -> skip;
+				fi;
+
+				if
+				:: slide_status.lower == closed ->
+					change_slide_pos!low; slide_pos_changed?true;
+				:: slide_status.lower == open -> skip;
+				fi;
+				change_doors_pos!low; doors_pos_changed?true;
+			:: doors_status.lower == open -> skip;
+			fi;
 		fi;
+
 		observed_low[0]?true;
+
+
 	:: request_high?true ->
 		if
-		:: doors_status.higher == closed ->
-			change_doors_pos!high; doors_pos_changed?true;
-		:: doors_status.higher == open -> skip;
+		:: lock_water_level == high_level ->
+			if
+			:: doors_status.higher== closed ->
+				if
+				:: doors_status.lower== closed ->
+					change_doors_pos!high; doors_pos_changed?true;
+				:: doors_status.lower == open ->
+					change_doors_pos!low; doors_pos_changed?true;
+					change_doors_pos!high; doors_pos_changed?true;
+				fi;
+			:: doors_status.higher == open -> skip;
+			fi;
+		:: lock_water_level == low_level ->
+			if
+			:: doors_status.higher == closed ->
+				if
+				:: doors_status.lower == open ->
+					change_doors_pos!low; doors_pos_changed?true;
+				:: doors_status.lower == closed -> skip;
+				fi;
+
+				if
+				:: slide_status.lower == open ->
+					change_slide_pos!low; slide_pos_changed?true;
+				:: slide_status.lower == closed -> skip;
+				fi;
+
+				if
+				:: slide_status.higher == closed ->
+					change_slide_pos!high; slide_pos_changed?true;
+				:: slide_status.higher == open -> skip;
+				fi;
+				change_doors_pos!high; doors_pos_changed?true;
+			:: doors_status.higher == open -> skip;
+			fi;
 		fi;
+
 		observed_high[0]?true;
 	od;
 }
 
 proctype monitor() {
+	atomic{
 	// A ship never leaves the system of locks (example).
 	assert(0 <= ship_pos[0] && ship_pos[0] <= N);
 
 	// (a) The lower pairs of doors and the higher pairs of doors are never simultaneously open.
-
-	assert(!(doors_status.lower == open) && (doors_status.higher == open));
+	assert(!((doors_status.lower == open) && (doors_status.higher == open)));
 
 	// (b1) When the lower pair of doors is open, the higher slide is closed.
 	//assert((doors_status.lower == open) -> (slide_status.higher == closed));
@@ -277,19 +345,35 @@ proctype monitor() {
 
 	// (c2) The higher pair of doors is only open when the water level in the lock is high.
 	//assert(doors_status.higher == open -> lock_water_level == high_level);
-	assert(!(doors_status.lower == open) || (lock_water_level == high_level))
+	assert(!(doors_status.higher == open) || (lock_water_level == high_level))
+	}
 }
 
 // LTL Formulas for other requirements:
 
-	// (d1) Always if a ship requests the lower pair of doors to open and its status is go_up, 
+	// (d1) Always if a ship requests the lower pair of doors to open and its status is go_up,
 	// the ship will eventually be inside the lock.
-	ltl d1 {[]((len(request_low) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) }
+	// ltl d1 {[](((len(request_low) > 0) && (ship_status[0] == go_up)) -> <>(ship_status[0] == go_up_in_lock)) }
 
-	// (d2) Always if a ship requests the higher pair of doors to open and its status is go_down, 
+	// (d2) Always if a ship requests the higher pair of doors to open and its status is go_down,
 	// the ship will eventually be inside the lock.
-	ltl d2 {[]((len(request_high) > 0) && (ship_status[0] == go_up)) -> eventually(ship_status[0] == go_up_in_lock) }
+	// ltl d2 {[](((len(request_high) > 0) && (ship_status[0] == go_up)) -> <>(ship_status[0] == go_up_in_lock)) }
 
+	// (test1) The single-lock model is such that always eventually
+	// a ship requests to open the lower doors.
+	// ltl test1 {[](<>(len(request_low) > 0))}
+
+	// (test2) The single-lock model is such that always eventually
+	// a ship requests to open the higher doors.
+	// ltl test2 {[](<>(len(request_high) > 0))}
+
+	// (test3) The single-lock model is such that always eventually,
+	// the water level in the lock will be high
+	// ltl test3 {[](<>(lock_water_level == high))}
+
+	// (test4) The single-lock model is such that always eventually,
+	// the water level in the lock will be low
+	// ltl test4 {[](<>(lock_water_level == low))}
 
 
 // Initial process that instantiates all other processes and creates
@@ -297,7 +381,7 @@ proctype monitor() {
 init {
 	byte proc;
 	atomic {
-		//run monitor();
+		run monitor();
 		run main_control();
 		// In the code below, the individual locks are initialised.
 		// The assumption here is that N == 1. When generalising the model for
